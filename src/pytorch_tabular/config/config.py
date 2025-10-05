@@ -287,8 +287,8 @@ class TrainerConfig:
                 'cpu','gpu','tpu','ipu', 'mps', 'auto'. Defaults to 'auto'.
                 Choices are: [`cpu`,`gpu`,`tpu`,`ipu`,'mps',`auto`].
 
-        devices (Optional[int]): Number of devices to train on (int). -1 uses all available devices. By
-                default, uses all available devices (-1)
+        devices (Union[int, List[int]]): Number of devices to train on (int), or list of device indices.
+                -1 uses all available devices. By default, uses all available devices (-1)
 
         devices_list (Optional[List[int]]): List of devices to train on (list). If specified, takes
                 precedence over `devices` argument. Defaults to None
