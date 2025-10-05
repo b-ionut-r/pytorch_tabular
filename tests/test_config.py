@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Tests for config classes."""
 
-import pytest
 from omegaconf import OmegaConf
 
 from pytorch_tabular.config import TrainerConfig
@@ -15,7 +14,7 @@ class TestTrainerConfig:
         # Test with a list of devices
         trainer_config = TrainerConfig(devices_list=[0, 1])
         assert trainer_config.devices == [0, 1]
-        
+
         # Wrap with OmegaConf as done in TabularModel
         config = OmegaConf.structured(trainer_config)
         assert config.devices == [0, 1]
@@ -24,7 +23,7 @@ class TestTrainerConfig:
         """Test devices_list with multiple GPU IDs as documented."""
         trainer_config = TrainerConfig(devices_list=[1, 2, 3, 4])
         assert trainer_config.devices == [1, 2, 3, 4]
-        
+
         config = OmegaConf.structured(trainer_config)
         assert config.devices == [1, 2, 3, 4]
 
@@ -32,7 +31,7 @@ class TestTrainerConfig:
         """Test that devices accepts integer values."""
         trainer_config = TrainerConfig(devices=2)
         assert trainer_config.devices == 2
-        
+
         config = OmegaConf.structured(trainer_config)
         assert config.devices == 2
 
@@ -40,7 +39,7 @@ class TestTrainerConfig:
         """Test that devices has default value of -1."""
         trainer_config = TrainerConfig()
         assert trainer_config.devices == -1
-        
+
         config = OmegaConf.structured(trainer_config)
         assert config.devices == -1
 
@@ -48,7 +47,7 @@ class TestTrainerConfig:
         """Test devices_list with a single device."""
         trainer_config = TrainerConfig(devices_list=[0])
         assert trainer_config.devices == [0]
-        
+
         config = OmegaConf.structured(trainer_config)
         assert config.devices == [0]
 
@@ -57,7 +56,7 @@ class TestTrainerConfig:
         # When both are provided, devices_list should take precedence
         trainer_config = TrainerConfig(devices=2, devices_list=[0, 1])
         assert trainer_config.devices == [0, 1]
-        
+
         config = OmegaConf.structured(trainer_config)
         assert config.devices == [0, 1]
 
@@ -65,13 +64,10 @@ class TestTrainerConfig:
         """Test that config works correctly with OmegaConf.merge."""
         trainer_config = TrainerConfig(devices_list=[0, 1], max_epochs=10)
         config = OmegaConf.structured(trainer_config)
-        
+
         # Simulate merging as done in TabularModel
-        merged = OmegaConf.merge(
-            OmegaConf.to_container(config),
-            {"accelerator": "gpu"}
-        )
-        
+        merged = OmegaConf.merge(OmegaConf.to_container(config), {"accelerator": "gpu"})
+
         assert merged.devices == [0, 1]
         assert merged.max_epochs == 10
         assert merged.accelerator == "gpu"
