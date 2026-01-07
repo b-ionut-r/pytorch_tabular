@@ -2312,13 +2312,14 @@ class TabularModel:
             # Train the model
             handle_oom = train_kwargs.pop("handle_oom", handle_oom)
             self.train(model, datamodule, handle_oom=handle_oom, **train_kwargs)
+            # Use val_fold_raw for prediction (already transformed if feature_generator used)
             if return_oof or is_callable_metric:
-                preds = self.predict(train.iloc[val_idx], include_input_features=False)
+                preds = self.predict(val_fold_raw, include_input_features=False)
                 oof_preds.append(preds)
             if is_callable_metric:
-                cv_metrics.append(metric(train.iloc[val_idx][self.config.target], preds))
+                cv_metrics.append(metric(val_fold_raw[self.config.target], preds))
             else:
-                result = self.evaluate(train.iloc[val_idx], verbose=False)
+                result = self.evaluate(val_fold_raw, verbose=False)
                 cv_metrics.append(result[0][metric])
             if verbose:
                 logger.info(f"Fold {fold+1}/{cv.get_n_splits()} score: {cv_metrics[-1]}")
