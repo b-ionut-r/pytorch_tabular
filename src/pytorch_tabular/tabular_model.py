@@ -2266,6 +2266,17 @@ class TabularModel:
                     X_train_transformed = pd.DataFrame(X_train_transformed, index=X_train_fold.index, columns=col_names)
                     X_val_transformed = pd.DataFrame(X_val_transformed, index=X_val_fold.index, columns=col_names)
 
+                # Handle NaN/inf in numeric columns (framework only handles categorical NaN)
+                numeric_cols = X_train_transformed.select_dtypes(include=[np.number]).columns
+                for col in numeric_cols:
+                    X_train_transformed[col] = X_train_transformed[col].replace([np.inf, -np.inf], np.nan)
+                    X_val_transformed[col] = X_val_transformed[col].replace([np.inf, -np.inf], np.nan)
+                    fill_val = X_train_transformed[col].median()
+                    if pd.isna(fill_val):
+                        fill_val = 0
+                    X_train_transformed[col] = X_train_transformed[col].fillna(fill_val)
+                    X_val_transformed[col] = X_val_transformed[col].fillna(fill_val)
+
                 # Reconstruct dataframes with target
                 train_fold_raw = pd.concat([X_train_transformed, y_train_fold], axis=1)
                 val_fold_raw = pd.concat([X_val_transformed, y_val_fold], axis=1)
