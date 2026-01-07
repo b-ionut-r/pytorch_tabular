@@ -1,6 +1,7 @@
 # Pytorch Tabular - Multi-Config Ensemble
 # Extension for running multiple model configurations and ensembling predictions
 """Multi-Config Ensemble for Deep Learning AutoML."""
+from __future__ import annotations
 
 import copy
 import logging
