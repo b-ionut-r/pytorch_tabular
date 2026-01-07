@@ -35,7 +35,7 @@ from pytorch_lightning.utilities.rank_zero import rank_zero_only
 from rich import print as rich_print
 from rich.pretty import pprint
 from sklearn.base import TransformerMixin
-from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold
+from sklearn.model_selection import BaseCrossValidator, GroupKFold, KFold, StratifiedKFold
 from torch import nn
 
 from pytorch_tabular.config import (
@@ -2102,10 +2102,13 @@ class TabularModel:
             columns=self.config.continuous_cols + self.config.categorical_cols,
         )
 
-    def _check_cv(self, cv):
+    def _check_cv(self, cv, groups=None):
         cv = 5 if cv is None else cv
         if isinstance(cv, int):
-            if self.config.task == "classification":
+            # Use GroupKFold when groups is provided
+            if groups is not None:
+                return GroupKFold(n_splits=cv)
+            elif self.config.task == "classification":
                 return StratifiedKFold(cv)
             else:
                 return KFold(cv)
@@ -2144,6 +2147,7 @@ class TabularModel:
         verbose: bool = True,
         reset_datamodule: bool = True,
         handle_oom: bool = True,
+        feature_generator: Optional[TransformerMixin] = None,
         **kwargs,
     ):
         """Cross validate the model.
@@ -2157,6 +2161,7 @@ class TabularModel:
                 - integer, to specify the number of folds in a (Stratified)KFold,
                 - An iterable yielding (train, test) splits as arrays of indices.
                 - A scikit-learn CV splitter.
+                When `groups` is provided and cv is an int, GroupKFold will be used automatically.
 
             train (DataFrame): The training data with labels
 
@@ -2173,12 +2178,12 @@ class TabularModel:
                 along with the cross validation results. Defaults to False.
 
             groups (Optional[Union[str, np.ndarray]], optional): Group labels for
-                the samples used while splitting. If provided, will be used as the
-                `groups` argument for the `split` method of the cross validator.
-                If input is str, will use the column in the input dataframe with that
-                name as the group labels. If input is array-like, will use that as the
-                group. The only constraint is that the group labels should have the
-                same size as the number of rows in the input dataframe. Defaults to None.
+                the samples used while splitting. If provided and cv is an int, GroupKFold
+                will be used automatically. If input is str, will use the column in the
+                input dataframe with that name as the group labels. If input is array-like,
+                will use that as the group. The only constraint is that the group labels
+                should have the same size as the number of rows in the input dataframe.
+                Defaults to None.
 
             verbose (bool, optional): If True, will log the results. Defaults to True.
 
@@ -2188,13 +2193,27 @@ class TabularModel:
                 fold, they will be valid for all the other folds. Defaults to True.
 
             handle_oom (bool, optional): If True, will handle out of memory errors elegantly
+
+            feature_generator (Optional[TransformerMixin], optional): A sklearn-compatible transformer
+                that will be applied to the raw data BEFORE encoding. For each fold, fit_transform()
+                is called on training data, transform() on validation data. This allows feature
+                engineering that respects train/val split. Defaults to None.
+
             **kwargs: Additional keyword arguments to be passed to the `fit` method of the model.
 
         Returns:
             DataFrame: The dataframe with the cross validation results
 
         """
-        cv = self._check_cv(cv)
+        # Resolve groups if string column name provided
+        groups_array = None
+        if groups is not None:
+            if isinstance(groups, str):
+                groups_array = train[groups].values
+            else:
+                groups_array = np.asarray(groups)
+
+        cv = self._check_cv(cv, groups=groups_array)
         prep_dl_kwargs, prep_model_kwargs, train_kwargs = self._split_kwargs(kwargs)
         is_callable_metric = False
         if metric is None:
@@ -2205,7 +2224,7 @@ class TabularModel:
             is_callable_metric = True
 
         if isinstance(cv, BaseCrossValidator):
-            it = enumerate(cv.split(train, y=train[self.config.target], groups=groups))
+            it = enumerate(cv.split(train, y=train[self.config.target], groups=groups_array))
         else:
             # when iterable is directly passed
             it = enumerate(cv)
@@ -2216,24 +2235,55 @@ class TabularModel:
         for fold, (train_idx, val_idx) in it:
             if verbose:
                 logger.info(f"Running Fold {fold+1}/{cv.get_n_splits()}")
-            # train_fold = train.iloc[train_idx]
-            # val_fold = train.iloc[val_idx]
+
+            # Get raw train/val data for this fold
+            train_fold_raw = train.iloc[train_idx].copy()
+            val_fold_raw = train.iloc[val_idx].copy()
+
+            # Apply feature_generator on RAW data BEFORE encoding (if provided)
+            if feature_generator is not None:
+                if verbose:
+                    logger.info(f"Applying feature_generator (fit_transform on train, transform on val)")
+                # Separate features and target
+                target_col = self.config.target
+                y_train_fold = train_fold_raw[target_col]
+                y_val_fold = val_fold_raw[target_col]
+
+                # Get feature columns (excluding target)
+                feature_cols = [c for c in train_fold_raw.columns if c != target_col]
+                X_train_fold = train_fold_raw[feature_cols]
+                X_val_fold = val_fold_raw[feature_cols]
+
+                # Apply feature generator
+                X_train_transformed = feature_generator.fit_transform(X_train_fold, y_train_fold)
+                X_val_transformed = feature_generator.transform(X_val_fold)
+
+                # Convert to DataFrame if numpy array returned
+                if isinstance(X_train_transformed, np.ndarray):
+                    X_train_transformed = pd.DataFrame(X_train_transformed, index=X_train_fold.index)
+                if isinstance(X_val_transformed, np.ndarray):
+                    X_val_transformed = pd.DataFrame(X_val_transformed, index=X_val_fold.index)
+
+                # Reconstruct dataframes with target
+                train_fold_raw = pd.concat([X_train_transformed, y_train_fold], axis=1)
+                val_fold_raw = pd.concat([X_val_transformed, y_val_fold], axis=1)
+
             if reset_datamodule:
                 datamodule = None
             if datamodule is None:
                 # Initialize datamodule and model in the first fold
                 # uses train data from this fold to fit all transformers
                 datamodule = self.prepare_dataloader(
-                    train=train.iloc[train_idx],
-                    validation=train.iloc[val_idx],
+                    train=train_fold_raw,
+                    validation=val_fold_raw,
                     seed=42,
                     **prep_dl_kwargs,
                 )
                 model = self.prepare_model(datamodule, **prep_model_kwargs)
             else:
                 # Preprocess the current fold data using the fitted transformers and save in datamodule
-                datamodule.train, _ = datamodule.preprocess_data(train.iloc[train_idx], stage="inference")
-                datamodule.validation, _ = datamodule.preprocess_data(train.iloc[val_idx], stage="inference")
+                datamodule.train, _ = datamodule.preprocess_data(train_fold_raw, stage="inference")
+                datamodule.validation, _ = datamodule.preprocess_data(val_fold_raw, stage="inference")
 
             # Train the model
             handle_oom = train_kwargs.pop("handle_oom", handle_oom)

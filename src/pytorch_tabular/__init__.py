@@ -6,6 +6,7 @@ __version__ = "1.1.0"
 
 from . import models, ssl_models
 from .categorical_encoders import CategoricalEmbeddingTransformer
+from .ensemble import MultiConfigEnsemble
 from .feature_extractor import DeepFeatureExtractor
 from .tabular_datamodule import TabularDatamodule
 from .tabular_model import TabularModel
@@ -19,6 +20,7 @@ __all__ = [
     "TabularModel",
     "TabularModelTuner",
     "TabularDatamodule",
+    "MultiConfigEnsemble",
     "models",
     "ssl_models",
     "CategoricalEmbeddingTransformer",
