@@ -4,19 +4,17 @@
 
 import copy
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from sklearn.base import TransformerMixin
 
-from pytorch_tabular import TabularModel
-from pytorch_tabular.config import (
-    DataConfig,
-    OptimizerConfig,
-    TrainerConfig,
-)
+# Avoid circular import - import inside methods or use TYPE_CHECKING
+if TYPE_CHECKING:
+    from pytorch_tabular import TabularModel
+    from pytorch_tabular.config import DataConfig, OptimizerConfig, TrainerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +60,9 @@ class MultiConfigEnsemble:
             optimizer_config: Optional OptimizerConfig for optimizer settings.
             verbose: If True, log progress information.
         """
+        # Local imports to avoid circular dependency
+        from pytorch_tabular.config import OptimizerConfig, TrainerConfig
+
         self.model_configs = model_configs
         self.data_config = data_config
         self.trainer_config = trainer_config or TrainerConfig(
@@ -74,7 +75,7 @@ class MultiConfigEnsemble:
         self.verbose = verbose
 
         # Will be populated during fit
-        self.fitted_models: List[Tuple[str, TabularModel, float]] = []
+        self.fitted_models: List[Tuple[str, Any, float]] = []  # (name, model, score)
         self.weights: Optional[np.ndarray] = None
 
     def fit(
@@ -103,6 +104,9 @@ class MultiConfigEnsemble:
         Returns:
             self
         """
+        # Local import to avoid circular dependency
+        from pytorch_tabular import TabularModel
+
         self.fitted_models = []
 
         for name, model_config in self.model_configs:
