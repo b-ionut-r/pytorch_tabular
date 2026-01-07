@@ -2268,6 +2268,21 @@ class TabularModel:
                 train_fold_raw = pd.concat([X_train_transformed, y_train_fold], axis=1)
                 val_fold_raw = pd.concat([X_val_transformed, y_val_fold], axis=1)
 
+                # Update config columns to match transformed data
+                # Auto-detect categorical (object dtype or low cardinality) vs continuous
+                new_categorical = []
+                new_continuous = []
+                for col in X_train_transformed.columns:
+                    if X_train_transformed[col].dtype == 'object' or X_train_transformed[col].nunique() < 20:
+                        new_categorical.append(col)
+                    else:
+                        new_continuous.append(col)
+                # Update config with new column lists
+                self.config.categorical_cols = new_categorical
+                self.config.continuous_cols = new_continuous
+                if verbose:
+                    logger.info(f"Updated config: {len(new_categorical)} categorical, {len(new_continuous)} continuous cols")
+
             if reset_datamodule:
                 datamodule = None
             if datamodule is None:
