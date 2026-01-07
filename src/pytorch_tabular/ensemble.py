@@ -71,7 +71,7 @@ class MultiConfigEnsemble:
             max_epochs=100,
             early_stopping="valid_loss",
             early_stopping_patience=10,
-            enable_progress_bar=False,  # Avoid Rich progress bar crash with multiple models
+            progress_bar="simple",  # Avoid Rich progress bar crash with multiple models
         )
         self.optimizer_config = optimizer_config or OptimizerConfig()
         self.verbose = verbose
