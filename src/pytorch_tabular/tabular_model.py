@@ -2255,16 +2255,15 @@ class TabularModel:
                 X_train_fold = train_fold_raw[feature_cols]
                 X_val_fold = val_fold_raw[feature_cols]
 
-                # Apply feature generator
-                X_train_transformed = feature_generator.fit_transform(X_train_fold, y_train_fold)
+                # Apply feature generator - fit on train, transform on BOTH for consistency
+                feature_generator.fit(X_train_fold, y_train_fold)
+                X_train_transformed = feature_generator.transform(X_train_fold)
                 X_val_transformed = feature_generator.transform(X_val_fold)
 
-                # Convert to DataFrame if numpy array returned, with proper column names
+                # Convert to DataFrame if numpy array returned
                 if isinstance(X_train_transformed, np.ndarray):
                     col_names = [f'feat_{i}' for i in range(X_train_transformed.shape[1])]
                     X_train_transformed = pd.DataFrame(X_train_transformed, index=X_train_fold.index, columns=col_names)
-                if isinstance(X_val_transformed, np.ndarray):
-                    col_names = [f'feat_{i}' for i in range(X_val_transformed.shape[1])]
                     X_val_transformed = pd.DataFrame(X_val_transformed, index=X_val_fold.index, columns=col_names)
 
                 # Reconstruct dataframes with target
