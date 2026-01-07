@@ -2245,8 +2245,11 @@ class TabularModel:
                 if verbose:
                     logger.info(f"Applying feature_generator (fit_transform on train, transform on val)")
                 # Separate features and target
-                # target can be a string or list of strings
-                target_cols = self.config.target if isinstance(self.config.target, list) else [self.config.target]
+                # target can be a string, list, or tuple
+                if isinstance(self.config.target, (list, tuple)):
+                    target_cols = list(self.config.target)
+                else:
+                    target_cols = [self.config.target]
                 y_train_fold = train_fold_raw[target_cols]
                 y_val_fold = val_fold_raw[target_cols]
 
