@@ -341,6 +341,10 @@ class TabularDatamodule(pl.LightningDataModule):
         if self.cache_mode is self.CACHE_MODES.INFERENCE:
             warnings.warn("Cannot update config in inference mode. Returning the cached config")
             return self._inferred_config
+        # After setup() is called, self.train is None and data is cached in datasets.
+        # Return cached inferred_config to ensure consistency with how the data was encoded.
+        elif self._fitted and self.train is None:
+            return self._inferred_config
         else:
             return self._update_config(config)
 

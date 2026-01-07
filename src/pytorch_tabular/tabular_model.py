@@ -2271,13 +2271,56 @@ class TabularModel:
                 val_fold_raw = pd.concat([X_val_transformed, y_val_fold], axis=1)
 
                 # Update config columns to match transformed data
-                # Use all transformed columns - categorical if object dtype, else continuous
+                # Determine categorical columns: 'object' dtype, 'category' dtype, or string-like
+                # Determine continuous columns: numeric dtypes that aren't categorical
                 all_cols = list(X_train_transformed.columns)
-                new_categorical = [c for c in all_cols if X_train_transformed[c].dtype == 'object']
-                new_continuous = [c for c in all_cols if c not in new_categorical]
+                new_categorical = []
+                new_continuous = []
+                for c in all_cols:
+                    col_dtype = X_train_transformed[c].dtype
+                    # Check for categorical dtypes (object, category, or string)
+                    if col_dtype == 'object' or col_dtype.name == 'category' or col_dtype.name.startswith('string'):
+                        # Additional check: if object dtype contains numeric strings, treat as continuous
+                        if col_dtype == 'object':
+                            # Try to convert to numeric - if successful, it's continuous
+                            try:
+                                pd.to_numeric(X_train_transformed[c].dropna().head(100), errors='raise')
+                                # If we get here, the values are numeric strings -> continuous
+                                new_continuous.append(c)
+                            except (ValueError, TypeError):
+                                # Contains non-numeric strings -> categorical
+                                new_categorical.append(c)
+                        else:
+                            # 'category' or 'string' dtype -> categorical
+                            new_categorical.append(c)
+                    else:
+                        # Numeric dtype -> continuous
+                        new_continuous.append(c)
 
                 self.config.categorical_cols = new_categorical
                 self.config.continuous_cols = new_continuous
+
+                # Validate transformed data for potential issues
+                # Check for NaN/Inf values in continuous columns that could cause issues
+                if new_continuous:
+                    nan_cols = []
+                    inf_cols = []
+                    for c in new_continuous:
+                        col_data = X_train_transformed[c]
+                        if col_data.isna().any():
+                            nan_cols.append(c)
+                        # Check for inf values (need to handle mixed types carefully)
+                        try:
+                            numeric_data = pd.to_numeric(col_data.dropna(), errors='coerce').dropna()
+                            if len(numeric_data) > 0 and np.isinf(numeric_data.values).any():
+                                inf_cols.append(c)
+                        except (ValueError, TypeError):
+                            pass
+                    if nan_cols:
+                        logger.warning(f"Found NaN values in continuous columns after feature_generator: {nan_cols[:5]}{'...' if len(nan_cols) > 5 else ''}")
+                    if inf_cols:
+                        logger.warning(f"Found Inf values in continuous columns after feature_generator: {inf_cols[:5]}{'...' if len(inf_cols) > 5 else ''}")
+
                 if verbose:
                     logger.info(f"Transformed: {len(all_cols)} features ({len(new_categorical)} cat, {len(new_continuous)} cont)")
 
