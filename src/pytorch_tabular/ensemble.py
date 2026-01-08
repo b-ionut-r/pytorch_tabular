@@ -220,6 +220,14 @@ class MultiConfigEnsemble:
                     X_test_transformed = pd.DataFrame(
                         X_test_transformed, index=X_test.index
                     )
+                # Handle NaN/inf in numeric columns
+                numeric_cols = X_test_transformed.select_dtypes(include=[np.number]).columns
+                for col in numeric_cols:
+                    X_test_transformed[col] = X_test_transformed[col].replace([np.inf, -np.inf], np.nan)
+                    fill_val = X_test_transformed[col].median()
+                    if pd.isna(fill_val):
+                        fill_val = 0
+                    X_test_transformed[col] = X_test_transformed[col].fillna(fill_val)
                 test_transformed = pd.concat([X_test_transformed, y_test], axis=1)
             else:
                 X_test_transformed = feature_generator.transform(test)
@@ -228,6 +236,15 @@ class MultiConfigEnsemble:
                         X_test_transformed, index=test.index
                     )
                 test_transformed = X_test_transformed
+
+            # Handle NaN/inf in numeric columns (same as cross_validate)
+            numeric_cols = test_transformed.select_dtypes(include=[np.number]).columns
+            for col in numeric_cols:
+                test_transformed[col] = test_transformed[col].replace([np.inf, -np.inf], np.nan)
+                fill_val = test_transformed[col].median()
+                if pd.isna(fill_val):
+                    fill_val = 0
+                test_transformed[col] = test_transformed[col].fillna(fill_val)
 
         # Get predictions from all models
         all_predictions = []
