@@ -127,7 +127,7 @@ class MultiConfigEnsemble:
                     verbose=self.verbose,
                 )
 
-                # Run cross-validation
+                # Run cross-validation to get scores (for ranking and weighting)
                 cv_scores, oof_preds = model.cross_validate(
                     cv=cv,
                     train=train,
@@ -146,6 +146,46 @@ class MultiConfigEnsemble:
 
                 if self.verbose:
                     logger.info(f"{name} CV Score: {mean_score:.4f} (+/- {std_score:.4f})")
+
+                # Refit on FULL training data for final model
+                if self.verbose:
+                    logger.info(f"Refitting {name} on full training data...")
+
+                # Apply feature generator to full data if provided
+                train_full = train
+                if feature_generator is not None:
+                    target_cols = self.data_config.target
+                    if isinstance(target_cols, str):
+                        target_cols = [target_cols]
+                    target_set = set(target_cols)
+                    feature_cols_list = [c for c in train.columns if c not in target_set]
+                    X_full = train[feature_cols_list]
+                    y_full = train[target_cols]
+
+                    feature_generator.fit(X_full, y_full)
+                    X_full_transformed = feature_generator.transform(X_full)
+
+                    if isinstance(X_full_transformed, np.ndarray):
+                        col_names = [f'feat_{i}' for i in range(X_full_transformed.shape[1])]
+                        X_full_transformed = pd.DataFrame(X_full_transformed, index=X_full.index, columns=col_names)
+
+                    # Handle NaN/inf
+                    numeric_cols = X_full_transformed.select_dtypes(include=[np.number]).columns
+                    for col in numeric_cols:
+                        X_full_transformed[col] = X_full_transformed[col].replace([np.inf, -np.inf], np.nan)
+                        fill_val = X_full_transformed[col].median()
+                        if pd.isna(fill_val):
+                            fill_val = 0
+                        X_full_transformed[col] = X_full_transformed[col].fillna(fill_val)
+
+                    train_full = pd.concat([X_full_transformed, y_full], axis=1)
+
+                    # Update config columns
+                    all_cols = list(X_full_transformed.columns)
+                    model.config.categorical_cols = [c for c in all_cols if X_full_transformed[c].dtype == 'object']
+                    model.config.continuous_cols = [c for c in all_cols if c not in model.config.categorical_cols]
+
+                model.fit(train_full)
 
                 self.fitted_models.append((name, model, mean_score))
 

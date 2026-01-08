@@ -2323,7 +2323,9 @@ class TabularModel:
                 cv_metrics.append(result[0][metric])
             if verbose:
                 logger.info(f"Fold {fold+1}/{cv.get_n_splits()} score: {cv_metrics[-1]}")
-            self.model.reset_weights()
+            # Only reset weights if NOT the last fold (keep last model for prediction)
+            if fold < cv.get_n_splits() - 1:
+                self.model.reset_weights()
         return cv_metrics, oof_preds
 
     def _combine_predictions(
